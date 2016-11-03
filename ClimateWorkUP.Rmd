@@ -1,0 +1,261 @@
+---
+title: "Effects of Climate Change on Hydrologic Units in Phase 1"
+author: "Daryl Van Dyke"
+date: "August 31, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Summary
+
+This report summarizes the results of initial data analysis for the climate change effects on hydrologic and climatic variable in the Phase 1 area of the terrestrial SHC project in the Klamath Basin.
+
+
+```{r, hide = TRUE}
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(reshape2)
+
+genSeq <- function(inputList){
+                i = 1
+                mybiglist <- vector('integer',1116)
+             for( year in inputList){
+                     #print(year)
+                     j = 1
+                     rep(year,12) -> tmp
+                     while(j < 13){
+                             mybiglist[i] <- tmp[j]
+                             i = i + 1
+                             j = j + 1
+                     }
+                     
+             }
+        return(mybiglist)
+        }
+
+nameFixer<- function(inputDF){
+        paste(names(inputDF), ".ppt", sep = "") -> names1
+        inputDF$TIMESTAMP <- inputDF$TIMESTAMP.ppt
+        names(inputDF) <- names1
+        }
+
+makeMeans_mm_to_m <- function(inputDF){
+
+        #vDates <- as.Date(inputDF$TIMESTEP.ppt)
+        
+        select(inputDF, contains("mean")) -> meanTemp
+        tbl_df(meanTemp/1000) -> meanTemp2
+        
+        #now calc Areas
+        zeros <- matrix(rep(0.0,16*16),nrow = 16)
+        diag(zeros) <- as.matrix(vAreas)
+
+        as.matrix(meanTemp2) %*% zeros -> tmp3
+
+        tmpNames <- names(meanTemp)
+        gsub(".m..",".m3.pptV",tmpNames) -> newNames
+        #return(newNames)
+        dfTmp <- tbl_df(tmp3)
+        
+        names(dfTmp)<- newNames
+        dfTmp$Date <- as.Date(inputDF$TIMESTEP)
+        #return(names(dfTmp))
+        return(dfTmp)
+        }
+
+grabSID <- function(inputSID = 1003){
+        C1 <- dfAccPPT_PCM$Date
+        indxSID <- inputSID - 999
+        C2  <- as.vector(dfAccPPT_GISS[,indxSID])
+        C3  <- as.vector(dfAccPPT_CCSM[,indxSID])
+        C4  <- as.vector(dfAccPPT_Miro[,indxSID])
+        C5  <- as.vector(dfAccPPT_PCM[,indxSID])
+        C6  <- as.vector(dfAccPPT_CNRM[,indxSID])
+        names <- c("Date", "GISSpptV","CCSMpptV", "MiroPptV", "PCMpptV", "CNRMpptV")
+        
+        out<- cbind(C1, C2, C3, C4, C5, C6)
+        names(out) <- names
+        dfOut <- tbl_df(out)
+        #names(dfOut) <- names
+        return(dfOut)
+        }
+
+grabSIDHist <- function(inputDF, inputSID = 1003){
+        C1 <- inputDF$Date
+        indxSID <- inputSID - 999
+        C2  <- as.vector(inputDF[,indxSID])
+        names <- c("Date", "HistpptV")
+        
+        out<- cbind(C1, C2)
+        names(out) <- names
+        dfOut <- tbl_df(out)
+        #names(dfOut) <- names
+        return(dfOut)    
+        }
+
+
+```
+
+## Analysis Set Up
+
+```{r}
+Phase1Huc10_CCSMrpc85_Ppt <- read.csv("X:/_05_KlamClime/07_inputTabular/Huc10/PPT/Phase1Huc10_CCSMrpc85_Ppt.csv")
+Phase1Huc10_CNRMcm5rcp85_Ppt <- read.csv("X:/_05_KlamClime/07_inputTabular/Huc10/PPT/Phase1Huc10_CNRMcm5rcp85_Ppt.csv")
+Phase1Huc10_GISS.AOM.A1B_Ppt <- read.csv("X:/_05_KlamClime/07_inputTabular/Huc10/PPT/Phase1Huc10_GISS-AOM-A1B_Ppt.csv")
+Phase1Huc10_Miroc5Rcp26_Ppt <- read.csv("X:/_05_KlamClime/07_inputTabular/Huc10/PPT/Phase1Huc10_Miroc5Rcp26_Ppt.csv")
+Phase1Huc10_PCM.A2_Ppt <- read.csv("X:/_05_KlamClime/07_inputTabular/Huc10/PPT/Phase1Huc10_PCM-A2_Ppt.csv")
+
+# Copy to DF and Delete Temp Tables
+dfGISS <- tbl_df(Phase1Huc10_GISS.AOM.A1B_Ppt)
+dfCCSM <- tbl_df(Phase1Huc10_CCSMrpc85_Ppt)
+dfCNRM <- tbl_df(Phase1Huc10_CNRMcm5rcp85_Ppt)
+dfPCM  <- tbl_df(Phase1Huc10_PCM.A2_Ppt)
+dfMiro <- tbl_df(Phase1Huc10_Miroc5Rcp26_Ppt)
+
+rm(Phase1Huc10_PCM.A2_Ppt)
+rm(Phase1Huc10_CCSMrpc85_Ppt)
+rm(Phase1Huc10_Miroc5Rcp26_Ppt)
+rm(Phase1Huc10_CNRMcm5rcp85_Ppt)
+rm(Phase1Huc10_GISS.AOM.A1B_Ppt)
+
+dfGISS$Date <- as.Date(dfGISS$TIMESTEP)
+dfPCM$Date  <- as.Date(dfPCM$TIMESTEP)
+dfMiro$Date <- as.Date(dfMiro$TIMESTEP)
+dfCNRM$Date <- as.Date(dfCNRM$TIMESTEP)
+dfCCSM$Date <- as.Date(dfCCSM$TIMESTEP)
+
+dfGISS$hy[1:1116] <- genSeq(2006:2100)[1:1116] 
+dfPCM$hy[1:1116]  <- genSeq(2006:2100)[1:1116] 
+dfMiro$hy[1:1116] <- genSeq(2006:2100)[1:1116]
+dfCNRM$hy[1:1116] <- genSeq(2006:2100)[1:1116] 
+dfCCSM$hy[1:1116] <- genSeq(2006:2100)[1:1116]
+
+dfGISS$hyf <- paste("hy",dfGISS$hy, sep = "")
+dfPCM$hyf  <- paste("hy",dfPCM$hy, sep = "")
+dfMiro$hyf <- paste("hy",dfMiro$hy, sep = "")
+dfCNRM$hyf <- paste("hy",dfCNRM$hy, sep = "")
+dfCCSM$hyf <- paste("hy",dfCCSM$hy, sep = "")
+
+# ori position of name fixer function block
+
+nameFixer(dfGISS)
+nameFixer(dfPCM)
+nameFixer(dfMiro)
+nameFixer(dfCNRM)
+nameFixer(dfCCSM)
+
+group_by(dfGISS, hy) -> dfGISSg
+group_by(dfPCM,  hy) -> dfPCMg
+group_by(dfMiro, hy) -> dfMirog
+group_by(dfCCSM, hy) -> dfCCSMg
+group_by(dfCNRM, hy) -> dfCNRMg
+
+tblTmnSlopes <- read.csv("E:/tblTmnSlopes.txt")
+areas <- cbind(tblTmnSlopes$SHCID, tblTmnSlopes$Area_m2)
+areas3 <- areas
+areas3[2:15, ] <- areas[1:14,]
+areas3[1,] <- areas[15,]
+areas3
+dfAreas <- tbl_df(areas3)
+names(dfAreas) <- c("SID", "Area_m2")
+dfAreas[16,2] <- sum(dfAreas[,2]) 
+dfAreas[16,1] <- 9999.
+vAreas <- as.vector(dfAreas[,2])
+
+dfAccPPT_GISS <- makeMeans_mm_to_m(dfGISS)
+dfAccPPT_CCSM <- makeMeans_mm_to_m(dfCCSM)
+dfAccPPT_Miro <- makeMeans_mm_to_m(dfMiro)
+dfAccPPT_PCM  <- makeMeans_mm_to_m(dfPCM)
+dfAccPPT_CNRM <- makeMeans_mm_to_m(dfCNRM)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r}
+dfRWC <- grabSID(1003)
+dfRWCl <- melt(dfRWC, id="Date")
+
+rwcTQ <- read.csv("X:/_05_KlamClime/07_inputTabular/USGS_Gage/RWC_tQ.csv")
+dfRWCobs <- tbl_df(rwcTQ)
+
+g <- ggplot(data = dfRWCl, aes(x = Date, y = value), color = variable)
+
+ggplot(data = dfRWCl, aes(x = Date, y = value, color = variable)) +
+        geom_line() + coord_cartesian(xlim = c(dfRWC$Date[900],dfRWC$Date[924])) +
+        ggtitle("Redwood Creek Total Monthly Volume of Precip") +
+        ylab("Precipitation/Month (m3/mo)")
+
+#       #       #
+#    Historic Data
+#       #       #
+Phase1Huc10_Historic_Ppt <- read.csv("X:/_05_KlamClime/07_inputTabular/Huc10/Hist/Phase1Huc10_Historic_Ppt.csv")
+dfHistPpt <- tbl_df(Phase1Huc10_Historic_Ppt)
+dfHistPpt$Date <- as.Date(dfHistPpt$TIMESTEP)
+
+makeMeans_mm_to_m(dfHistPpt) -> dfAccPPT_Hist
+
+dfRWCtq <- tbl_df(rwcTQ)
+dfRWCtq$Datef <- dfRWCtq$Date
+
+dfRWCtq$Date <- as.Date(dfRWCtq$Datef, "%m/%d/%Y")
+
+#g <- ggplot(dfm1, aes(y = dfm1$`dfRWC_Model_Obs$Q_cfs`, x = dfm1$`dfRWC_Model_Obs$HistpptV`))
+#g + geom_point() + geom_smooth(method = "lm", se = FALSE)
+
+
+dfHistPpt$Date <- as.Date(dfHistPpt$TIMESTEP)
+makeMeans_mm_to_m(dfHistPpt) -> dfAccPPT_Hist
+grabSIDHist(dfAccPPT_Hist) -> dfAccPPT_Hist_RWC
+
+
+inner_join(dfAccPPT_Hist_RWC, dfRWCtq, by = "Date") -> dfRWC_Model_Obs
+dfRWC_Model_Obs$PptV <- dfRWC_Model_Obs$HistpptV
+m1 <- lm(Q_cfs~PptV  ,data = dfRWC_Model_Obs)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+##  Streamflow Values for Redwood Creek
+
+```{r}
+RWC_11482500_DailyQ_cln <- read.delim("X:/_05_KlamClime/07_inputTabular/USGS_Gage/RWC_11482500_DailyQ_cln.txt")
+
+dfRWCq <- tbl_df(RWC_11482500_DailyQ_cln)
+dfRWCq$Date <- as.Date(dfRWCq$datetime, "%Y-%m-%d")
+
+quants <- 0:100/100
+quantile(dfRWCq$Q_cfs, quants,na.rm = TRUE) -> dfRWCQuants
+tbl_df(dfRWCQuants) -> dfRWCQuants
+
+names(dfRWCQuants) <- "Q_cfs"
+dfRWCQuants$percentile <- quants
+
+library(hydroTSM)
+
+
+
+getQuant <- function(inputVal, dfQuants=dfRWCQuants){
+        for(i in 1:100){
+                logicTest <- (dfQuants$Q_cfs[i] > inputVal)
+                #print(logicTest)
+                if(logicTest){
+                        returnVal <- dfQuants$percentile[i-1]
+                        return(returnVal)
+                }
+        }
+}
+
+
+fdc(dfRWCq$Q_cfs, main="FDC for RWC, Historical") -> fdcRWC
+
+
+```        
+
+
+
